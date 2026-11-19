@@ -1,0 +1,18 @@
+{
+  "name": "相続・生前贈与 4パターン比較シミュレーター (v4)",
+  "short_name": "相続シミュレータ",
+  "description": "暦年贈与・相続時精算課税・ハイブリッド戦略の4パターン比較および最適配偶者割合を探索するオフライン対応PWA",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1e293b",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

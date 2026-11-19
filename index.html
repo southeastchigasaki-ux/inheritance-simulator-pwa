@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e293b">
+  <title>相続・生前贈与 4パターン比較シミュレーター (v4 PWA)</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #475569;
+      --primary: #1d4ed8;
+      --primary-hover: #1e40af;
+      --accent-bg: #fef2f2;
+      --accent-border: #fca5a5;
+      --accent-text: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: #1e293b;
+      color: #ffffff;
+      padding: 16px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.15rem;
+    }
+    .badge {
+      background: #334155;
+      color: #e2e8f0;
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .grid-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .card h2 {
+      margin: 0 0 12px 0;
+      font-size: 0.98rem;
+      color: #1e293b;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 6px;
+    }
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .field label {
+      font-size: 0.88rem;
+      color: var(--text);
+      flex: 1;
+    }
+    .field input[type="number"] {
+      width: 150px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      text-align: right;
+      font-size: 0.92rem;
+    }
+    .checkbox-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 9px;
+      font-size: 0.88rem;
+      cursor: pointer;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    .btn-secondary:hover { background: #cbd5e1; }
+    .btn-print {
+      background: #0f766e;
+      color: #ffffff;
+    }
+    .btn-print:hover { background: #115e59; }
+    #installBtn {
+      display: none;
+      background: #f59e0b;
+      color: #0f172a;
+    }
+    .banner {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 14px;
+      font-size: 0.98rem;
+    }
+    .banner.highlight {
+      background: var(--accent-bg);
+      border-color: var(--accent-border);
+      color: var(--accent-text);
+    }
+    .table-wrap {
+      overflow-x: auto;
+      margin-bottom: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+      font-size: 0.88rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: right;
+    }
+    th {
+      background: #1e293b;
+      color: #ffffff;
+      text-align: center;
+      font-weight: 600;
+    }
+    td:first-child {
+      text-align: left;
+      font-weight: 600;
+    }
+    tr.row-em {
+      background: #eff6ff;
+      font-weight: 700;
+    }
+    tr.row-tax {
+      background: #fef2f2;
+      font-weight: 700;
+    }
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 14px;
+    }
+    .chart-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .chart-box h3 {
+      margin: 0 0 8px 0;
+      font-size: 0.92rem;
+      color: #1e293b;
+    }
+    canvas {
+      width: 100%;
+      height: 270px;
+      display: block;
+    }
+    @media print {
+      header, .actions, #installBtn { display: none !important; }
+      body { background: #ffffff; }
+      main { max-width: 100%; padding: 0; }
+      .card, .chart-box { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>相続・生前贈与 4パターン比較シミュレーター (v4)</h1>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <span class="badge" id="offlineBadge">オフライン対応 PWA</span>
+      <button id="installBtn" type="button">アプリとしてインストール</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid-form">
+      <section class="card">
+        <h2>1. 資産・財産情報</h2>
+        <div class="field">
+          <label for="husband_asset">夫の金融資産総額（円）</label>
+          <input type="number" id="husband_asset" step="1000000">
+        </div>
+        <div class="field">
+          <label for="husband_land_value">夫名義の宅地評価額（円）</label>
+          <input type="number" id="husband_land_value" step="1000000">
+        </div>
+        <div class="field">
+          <label for="wife_asset">妻名義の金融資産総額（円）</label>
+          <input type="number" id="wife_asset" step="1000000">
+        </div>
+        <div class="field">
+          <label for="wife_land_value">妻名義の宅地評価額（円）</label>
+          <input type="number" id="wife_land_value" step="1000000">
+        </div>
+        <div class="field">
+          <label for="land_area_sqm">宅地の面積（㎡）</label>
+          <input type="number" id="land_area_sqm" step="10">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. 税制特例・精算課税の設定</h2>
+        <label class="checkbox-field">
+          <input type="checkbox" id="apply_kakuchi_1st">
+          <span>一次相続で小規模宅地等の特例を適用</span>
+        </label>
+        <label class="checkbox-field">
+          <input type="checkbox" id="apply_kakuchi_2nd">
+          <span>二次相続で小規模宅地等の特例を適用</span>
+        </label>
+        <div class="field">
+          <label for="kakuchi_limit_sqm">特例の上限面積（㎡）</label>
+          <input type="number" id="kakuchi_limit_sqm" step="10">
+        </div>
+        <div class="field">
+          <label for="seisan_annual_gift">精算課税の年間贈与額（円/人）</label>
+          <input type="number" id="seisan_annual_gift" step="100000">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. ライフプラン・家族構成</h2>
+        <div class="field">
+          <label for="husband_life">一次相続までの年数（年）</label>
+          <input type="number" id="husband_life" min="0" step="1">
+        </div>
+        <div class="field">
+          <label for="wife_life">二次相続までの年数（年）</label>
+          <input type="number" id="wife_life" min="0" step="1">
+        </div>
+        <div class="field">
+          <label for="num_children">子供の人数（人）</label>
+          <input type="number" id="num_children" min="1" step="1">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4. キャッシュフロー・運用利回り</h2>
+        <div class="field">
+          <label for="living_cost_couple">夫婦健在時の年間生活費（円）</label>
+          <input type="number" id="living_cost_couple" step="100000">
+        </div>
+        <div class="field">
+          <label for="living_cost_single">妻単身時の年間生活費（円）</label>
+          <input type="number" id="living_cost_single" step="100000">
+        </div>
+        <div class="field">
+          <label for="return_rate_pct">年間期待運用利回り・地価変動率（%）</label>
+          <input type="number" id="return_rate_pct" step="0.1">
+        </div>
+      </section>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn-primary" id="runBtn">▶ シミュレーション実行</button>
+      <button type="button" class="btn-secondary" id="hybridBtn">ハイブリッド差が出やすい条件を入力</button>
+      <button type="button" class="btn-secondary" id="resetBtn">初期値に戻す</button>
+      <button type="button" class="btn-print" id="printBtn">印刷 / PDF保存</button>
+    </div>
+
+    <div class="banner" id="bannerBox">
+      上のフォームに条件を入力し、「シミュレーション実行」ボタンを押してください。
+    </div>
+
+    <section class="card" id="resultSection" style="display:none;">
+      <h2 id="resultMeta">4パターン比較サマリー</h2>
+      <div class="table-wrap">
+        <table id="summaryTable">
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>① 無対策<br>(妻50%)</th>
+              <th id="thDyn">② 暦年・動的最適</th>
+              <th id="thSei">③ 相続時精算課税</th>
+              <th id="thHyb">④ ハイブリッド<br>[父精算・母暦年]</th>
+            </tr>
+          </thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
+      </div>
+
+      <div class="charts-grid" id="chartsGrid"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
