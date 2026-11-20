@@ -216,9 +216,11 @@
       margin: 10mm;
     }
     @media print {
-      body {
+      html, body {
         background: #fff;
         padding: 0;
+        margin: 0;
+        width: 100%;
       }
       .no-print {
         display: none !important;
@@ -226,50 +228,57 @@
       .container {
         max-width: 100%;
         width: 100%;
+        margin: 0;
+        padding: 0;
       }
-      #resultSection {
+      #resultSection, #chartsGrid {
         display: block !important;
       }
       .report-page {
+        display: block !important;
         border: none;
         border-radius: 0;
         padding: 0;
         margin: 0;
+        width: 100%;
+        height: 178mm;
+        page-break-inside: avoid;
+        break-inside: avoid;
         page-break-after: always;
         break-after: page;
-        height: 185mm;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+        overflow: hidden;
       }
-      .report-page:last-child {
+      .report-page.summary-page {
         page-break-after: auto;
         break-after: auto;
       }
       .report-page h3 {
-        font-size: 15pt;
-        margin-bottom: 6px;
+        font-size: 14pt;
+        margin: 0 0 4mm 0;
+        height: 8mm;
+        line-height: 8mm;
       }
       .chart-wrap {
-        height: 168mm;
-      }
-      .summary-page {
-        justify-content: flex-start;
-        gap: 8px;
+        width: 100%;
+        height: 164mm;
       }
       .summary-page .banner.highlight {
-        padding: 8px 12px;
+        padding: 6px 12px;
         margin-bottom: 4px;
-        font-size: 11pt;
+        font-size: 10.5pt;
+      }
+      .summary-page .meta-sub {
+        font-size: 8.5pt;
+        margin-bottom: 4px;
       }
       .summary-page table {
         font-size: 8.5pt;
       }
       .summary-page th, .summary-page td {
-        padding: 4px 8px;
+        padding: 3.5px 8px;
       }
       .tax-chart-wrap {
-        height: 82mm;
+        height: 78mm;
         margin-top: 6px;
       }
     }
@@ -322,31 +331,31 @@
       <button id="printBtn">印刷 / PDF保存（全5ページ）</button>
     </div>
 
-    <div id="bannerBox" class="banner no-print">上のフォームに条件を入力し、「シミュレーション実行」ボタンを押してください。</div>
+    <div id="bannerBox" class="banner no-print">
+      上のフォームに条件を入力し、「シミュレーション実行」ボタンを押してください。
+    </div>
 
     <div id="resultSection">
-      <!-- 1〜4ページ目：各パターンの推移グラフが1ページずつ入ります -->
+      <!-- 1〜4ページ目：各パターンの折れ線グラフ（1グラフ＝1ページ） -->
       <div id="chartsGrid"></div>
 
-      <!-- 5ページ目：比較サマリー表 ＋ 税金内訳積み上げ棒グラフ -->
+      <!-- 5ページ目：比較結果サマリー表＆税金総負担額の積み上げ棒グラフ -->
       <div class="report-page summary-page">
-        <div>
-          <h3>【実務精度向上版v4：相続・生前贈与 4パターン比較シミュレーション結果】</h3>
-          <div id="printBannerBox" class="banner highlight"></div>
-          <div id="resultMeta" class="meta-sub"></div>
-          <table>
-            <thead>
-              <tr>
-                <th>項目</th>
-                <th>① 無対策<br>(妻50%)</th>
-                <th id="thDyn">② 暦年・動的最適</th>
-                <th id="thSei">③ 相続時精算課税</th>
-                <th id="thHyb">④ ハイブリッド<br>[父精算・母暦年]</th>
-              </tr>
-            </thead>
-            <tbody id="summaryBody"></tbody>
-          </table>
-        </div>
+        <h3>【実務精度向上版v4：相続・生前贈与 4パターン比較シミュレーション結果】</h3>
+        <div id="printBannerBox" class="banner highlight"></div>
+        <div id="resultMeta" class="meta-sub"></div>
+        <table>
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>① 無対策<br>(妻50%)</th>
+              <th id="thDyn">② 暦年・動的最適</th>
+              <th id="thSei">③ 相続時精算課税</th>
+              <th id="thHyb">④ ハイブリッド<br>[父精算・母暦年]</th>
+            </tr>
+          </thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
         <div class="tax-chart-wrap">
           <canvas id="taxBreakdownChart"></canvas>
         </div>
