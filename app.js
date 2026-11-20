@@ -38,6 +38,8 @@ const HYBRID_PRESET = {
   seisan_annual_gift: 1100000
 };
 
+let lastRenderState = null;
+
 // ----------------------------------------------------------------------------
 // 1. 税金計算ロジック
 // ----------------------------------------------------------------------------
@@ -205,7 +207,6 @@ function simulateInheritanceTimeline(config, giftMode = "none", spouseSharePct =
     children: childrenReceived
   }];
 
-  // フェーズ1: 現時点 〜 一次相続（夫死亡）
   for (let year = 1; year <= yearsToFirst; year++) {
     const currentTotalH = husbandAsset + landValueH;
     const inhRateH = getInheritanceMarginalRate(currentTotalH, numChildren + 1);
@@ -276,7 +277,6 @@ function simulateInheritanceTimeline(config, giftMode = "none", spouseSharePct =
     });
   }
 
-  // 一次相続（夫死亡）
   let addToEstateH = 0;
   let giftTaxCreditH = 0;
   if (husbandGiftMode === "dynamic") {
@@ -339,7 +339,6 @@ function simulateInheritanceTimeline(config, giftMode = "none", spouseSharePct =
     children: childrenReceived
   };
 
-  // フェーズ2: 一次相続後 〜 二次相続（妻死亡）
   for (let year = yearsToFirst + 1; year <= yearsToSecond; year++) {
     const currentTotalW = wifeAsset + landValueW;
     const inhRate = getInheritanceMarginalRate(currentTotalW, numChildren);
@@ -390,7 +389,6 @@ function simulateInheritanceTimeline(config, giftMode = "none", spouseSharePct =
     });
   }
 
-  // 二次相続（妻死亡）
   let addToEstateW = 0;
   let giftTaxCreditW = 0;
   if (wifeGiftMode === "dynamic") {
@@ -480,6 +478,7 @@ function applyFormValues(values) {
   banner.classList.remove("highlight");
   banner.textContent = "上のフォームに条件を入力し、「シミュレーション実行」ボタンを押してください。";
   document.getElementById("resultSection").style.display = "none";
+  lastRenderState = null;
 }
 
 function collectConfig() {
@@ -516,9 +515,12 @@ function collectConfig() {
   };
 }
 
+// 1〜4ページ目用：各パターンの資産推移折れ線グラフ（参考PDF準拠デザイン）
 function drawTimelineChart(canvas, timeline, maxAsset) {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.max(window.devicePixelRatio || 1, 2);
   const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   const ctx = canvas.getContext("2d");
@@ -526,24 +528,27 @@ function drawTimelineChart(canvas, timeline, maxAsset) {
 
   const w = rect.width;
   const h = rect.height;
-  const padLeft = 72;
-  const padRight = 20;
-  const padTop = 26;
-  const padBottom = 34;
+  const padLeft = 104;
+  const padRight = 24;
+  const padTop = 20;
+  const padBottom = 42;
   const plotW = w - padLeft - padRight;
   const plotH = h - padTop - padBottom;
 
   ctx.clearRect(0, 0, w, h);
 
-  // グリッド＆Y軸目盛り
-  const yMax = maxAsset > 0 ? maxAsset * 1.08 : 100000000;
-  ctx.strokeStyle = "#e2e8f0";
-  ctx.fillStyle = "#475569";
-  ctx.font = "11px sans-serif";
+  const stepUnit = 50000000;
+  const rawMax = maxAsset > 0 ? maxAsset * 1.06 : 100000000;
+  const yMax = Math.ceil(rawMax / stepUnit) * stepUnit;
+  const steps = Math.max(4, Math.round(yMax / stepUnit));
+
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#334155";
+  ctx.font = "12px sans-serif";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
 
-  const steps = 5;
   for (let i = 0; i <= steps; i++) {
     const val = (yMax / steps) * i;
     const y = padTop + plotH - (plotH * i) / steps;
@@ -551,30 +556,49 @@ function drawTimelineChart(canvas, timeline, maxAsset) {
     ctx.moveTo(padLeft, y);
     ctx.lineTo(padLeft + plotW, y);
     ctx.stroke();
-    ctx.fillText(formatOkuMan(val), padLeft - 6, y);
+    ctx.fillText(formatOkuMan(val), padLeft - 8, y);
   }
 
-  // X軸目盛り
+  ctx.save();
+  ctx.translate(16, padTop + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillStyle = "#1e293b";
+  ctx.fillText("資産額（数千万円単位）", 0, 0);
+  ctx.restore();
+
   const maxYear = timeline[timeline.length - 1].year || 1;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  for (const d of timeline) {
-    const x = padLeft + (plotW * d.year) / maxYear;
-    if (maxYear <= 15 || d.year % 2 === 0 || d.year === maxYear) {
-      ctx.fillText(`${d.year}年`, x, padTop + plotH + 6);
-    }
+  ctx.font = "12px sans-serif";
+  const xStep = maxYear <= 16 ? 2 : 5;
+  for (let yr = 0; yr <= maxYear; yr += xStep) {
+    const x = padLeft + (plotW * yr) / maxYear;
+    ctx.beginPath();
+    ctx.moveTo(x, padTop);
+    ctx.lineTo(x, padTop + plotH);
+    ctx.stroke();
+    ctx.fillText(`${yr}`, x, padTop + plotH + 8);
   }
 
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("経過年数（年）", padLeft + plotW / 2, padTop + plotH + 25);
+
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(padLeft, padTop, plotW, plotH);
+
   const series = [
-    { key: "husband", color: "#1f77b4", label: "夫" },
-    { key: "wife", color: "#ff7f0e", label: "妻" },
-    { key: "children", color: "#2ca02c", label: "子" }
+    { key: "husband", color: "#1f77b4", label: "夫の資産（土地含む）", shape: "circle" },
+    { key: "wife", color: "#ff7f0e", label: "妻の資産（土地含む）", shape: "square" },
+    { key: "children", color: "#2ca02c", label: "子の累積受取額", shape: "triangle" }
   ];
 
   for (const s of series) {
     ctx.strokeStyle = s.color;
     ctx.fillStyle = s.color;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
     timeline.forEach((d, idx) => {
       const x = padLeft + (plotW * d.year) / maxYear;
@@ -588,28 +612,229 @@ function drawTimelineChart(canvas, timeline, maxAsset) {
       const x = padLeft + (plotW * d.year) / maxYear;
       const y = padTop + plotH - (plotH * d[s.key]) / yMax;
       ctx.beginPath();
-      ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fill();
+      if (s.shape === "circle") {
+        ctx.arc(x, y, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (s.shape === "square") {
+        ctx.fillRect(x - 4, y - 4, 8, 8);
+      } else {
+        ctx.moveTo(x, y - 5);
+        ctx.lineTo(x + 4.8, y + 4);
+        ctx.lineTo(x - 4.8, y + 4);
+        ctx.closePath();
+        ctx.fill();
+      }
     });
   }
 
-  // 凡例 & 最終受取額ラベル
-  let lx = padLeft;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  for (const s of series) {
+  const legX = padLeft + 12;
+  const legY = padTop + 10;
+  const legW = 192;
+  const legH = 74;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1;
+  ctx.fillRect(legX, legY, legW, legH);
+  ctx.strokeRect(legX, legY, legW, legH);
+
+  series.forEach((s, idx) => {
+    const rowY = legY + 16 + idx * 21;
+    ctx.strokeStyle = s.color;
     ctx.fillStyle = s.color;
-    ctx.fillRect(lx, 7, 12, 12);
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(legX + 10, rowY);
+    ctx.lineTo(legX + 34, rowY);
+    ctx.stroke();
+
+    ctx.beginPath();
+    if (s.shape === "circle") {
+      ctx.arc(legX + 22, rowY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (s.shape === "square") {
+      ctx.fillRect(legX + 18, rowY - 4, 8, 8);
+    } else {
+      ctx.moveTo(legX + 22, rowY - 4.5);
+      ctx.lineTo(legX + 26.5, rowY + 3.5);
+      ctx.lineTo(legX + 17.5, rowY + 3.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     ctx.fillStyle = "#0f172a";
-    ctx.fillText(s.label, lx + 16, 13);
-    lx += 46;
-  }
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s.label, legX + 42, rowY);
+  });
 
   const finalChild = timeline[timeline.length - 1].children;
+  const badgeText = `最終受取: ${formatOkuMan(finalChild)}`;
+  ctx.font = "bold 13px sans-serif";
+  const textW = ctx.measureText(badgeText).width;
+  const badgeW = textW + 22;
+  const badgeH = 28;
+  const badgeX = padLeft + plotW - badgeW - 14;
+  const badgeY = padTop + 14;
+
+  ctx.fillStyle = "#f0fdf4";
+  ctx.strokeStyle = "#16a34a";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+  ctx.fill();
+  ctx.stroke();
+
   ctx.fillStyle = "#15803d";
-  ctx.font = "bold 11px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2);
+}
+
+// 5ページ目用：税金総負担額の内訳比較（積み上げ棒グラフ）
+function drawTaxBreakdownChart(canvas, taxItems) {
+  const dpr = Math.max(window.devicePixelRatio || 1, 2);
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  const padLeft = 74;
+  const padRight = 24;
+  const padTop = 32;
+  const padBottom = 42;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText("税金総負担額の内訳比較（万円）", padLeft + plotW / 2, 6);
+
+  const maxTotalMan = Math.max(...taxItems.map(d => (d.gift + d.tax1 + d.tax2) / 10000), 1000);
+  const stepMan = Math.ceil((maxTotalMan * 1.18) / 5 / 500) * 500;
+  const yMaxMan = stepMan * 5;
+
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.fillStyle = "#334155";
+  ctx.font = "11px sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText(`最終: ${formatOkuMan(finalChild)}`, w - padRight, 13);
+  ctx.textBaseline = "middle";
+
+  for (let i = 0; i <= 5; i++) {
+    const valMan = stepMan * i;
+    const y = padTop + plotH - (plotH * i) / 5;
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(padLeft + plotW, y);
+    ctx.stroke();
+    ctx.fillText(valMan.toLocaleString("ja-JP"), padLeft - 8, y);
+  }
+
+  ctx.save();
+  ctx.translate(16, padTop + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText("税額（万円）", 0, 0);
+  ctx.restore();
+
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(padLeft, padTop, plotW, plotH);
+
+  const colW = plotW / taxItems.length;
+  const barW = Math.min(72, colW * 0.42);
+
+  taxItems.forEach((item, idx) => {
+    const cx = padLeft + colW * (idx + 0.5);
+    const bx = cx - barW / 2;
+
+    const gMan = item.gift / 10000;
+    const t1Man = item.tax1 / 10000;
+    const t2Man = item.tax2 / 10000;
+    const totMan = gMan + t1Man + t2Man;
+
+    let curY = padTop + plotH;
+
+    if (gMan > 0) {
+      const bh = (plotH * gMan) / yMaxMan;
+      ctx.fillStyle = "#3b7ea1";
+      ctx.fillRect(bx, curY - bh, barW, bh);
+      curY -= bh;
+    }
+    if (t1Man > 0) {
+      const bh = (plotH * t1Man) / yMaxMan;
+      ctx.fillStyle = "#f28e2b";
+      ctx.fillRect(bx, curY - bh, barW, bh);
+      curY -= bh;
+    }
+    if (t2Man > 0) {
+      const bh = (plotH * t2Man) / yMaxMan;
+      ctx.fillStyle = "#e15759";
+      ctx.fillRect(bx, curY - bh, barW, bh);
+      curY -= bh;
+    }
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`合計 ${Math.round(totMan).toLocaleString("ja-JP")}万円`, cx, curY - 4);
+
+    ctx.fillStyle = "#1e293b";
+    ctx.font = "11px sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillText(item.line1, cx, padTop + plotH + 6);
+    ctx.fillText(item.line2, cx, padTop + plotH + 21);
+  });
+
+  const legItems = [
+    { color: "#3b7ea1", label: "贈与税（累計）" },
+    { color: "#f28e2b", label: "一次相続税（夫死亡）" },
+    { color: "#e15759", label: "二次相続税（妻死亡）" }
+  ];
+  const legW = 158;
+  const legH = 64;
+  const legX = padLeft + plotW - legW - 10;
+  const legY = padTop + 8;
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+  ctx.strokeStyle = "#cbd5e1";
+  ctx.lineWidth = 1;
+  ctx.fillRect(legX, legY, legW, legH);
+  ctx.strokeRect(legX, legY, legW, legH);
+
+  legItems.forEach((li, i) => {
+    const ry = legY + 14 + i * 19;
+    ctx.fillStyle = li.color;
+    ctx.fillRect(legX + 10, ry - 5, 14, 10);
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(li.label, legX + 30, ry);
+  });
+}
+
+function redrawAllCharts() {
+  if (!lastRenderState) return;
+  const { scenarios, maxAsset, taxItems } = lastRenderState;
+  scenarios.forEach((sc, idx) => {
+    const canvas = document.getElementById(`chart_${idx}`);
+    if (canvas) drawTimelineChart(canvas, sc.tl, maxAsset);
+  });
+  const taxCanvas = document.getElementById("taxBreakdownChart");
+  if (taxCanvas) drawTaxBreakdownChart(taxCanvas, taxItems);
 }
 
 function runSimulation() {
@@ -640,12 +865,14 @@ function runSimulation() {
   const best = candidates[0];
   const maxIncrease = Math.max(0, best.diff);
 
+  const bannerText = `★ 対策により、子供に残せるお金が【 ${formatYen(maxIncrease)} 】増えます!（最適: ${best.name}）`;
   const banner = document.getElementById("bannerBox");
   banner.classList.add("highlight");
-  banner.textContent = `★ 対策により、子供に残せるお金が【 ${formatYen(maxIncrease)} 】増えます!（最適: ${best.name}）`;
+  banner.textContent = bannerText;
+  document.getElementById("printBannerBox").textContent = bannerText;
 
   document.getElementById("resultMeta").textContent =
-    `4パターン比較サマリー（宅地 ${config.land_area_sqm}㎡ / 特例上限 ${config.kakuchi_limit_sqm}㎡）`;
+    `宅地面積: ${config.land_area_sqm}㎡（特例上限 ${config.kakuchi_limit_sqm}㎡・面積按分） / 最適妻割合: 暦年 ${ratioDyn}%・精算 ${ratioSei}%・ハイブリッド ${ratioHyb}%`;
   document.getElementById("thDyn").innerHTML = `② 暦年・動的最適<br>(妻${ratioDyn}%)`;
   document.getElementById("thSei").innerHTML = `③ 相続時精算課税<br>(妻${ratioSei}%)`;
   document.getElementById("thHyb").innerHTML = `④ ハイブリッド<br>[父精算・母暦年](妻${ratioHyb}%)`;
@@ -665,10 +892,10 @@ function runSimulation() {
   ).join("");
 
   const scenarios = [
-    { title: "① 無対策 (妻50%固定)", tl: rNone.timeline },
-    { title: `② 暦年贈与・動的最適化 (妻${ratioDyn}%)`, tl: rDyn.timeline },
-    { title: `③ 相続時精算課税 (妻${ratioSei}%)`, tl: rSei.timeline },
-    { title: `④ 両親別ハイブリッド [父精算・母暦年] (妻${ratioHyb}%)`, tl: rHyb.timeline }
+    { title: "① 無対策（ベースライン 妻50%固定）", tl: rNone.timeline },
+    { title: `② 暦年贈与・動的最適化（妻取得割合: ${ratioDyn}%）`, tl: rDyn.timeline },
+    { title: `③ 相続時精算課税・年${Math.round(config.seisan_annual_gift / 10000)}万枠活用（妻取得割合: ${ratioSei}%）`, tl: rSei.timeline },
+    { title: `④ 両親別ハイブリッド [父精算・母暦年]（妻取得割合: ${ratioHyb}%）`, tl: rHyb.timeline }
   ];
 
   let maxAsset = 0;
@@ -680,13 +907,20 @@ function runSimulation() {
 
   const chartsGrid = document.getElementById("chartsGrid");
   chartsGrid.innerHTML = scenarios.map((sc, idx) =>
-    `<div class="chart-box"><h3>${sc.title}</h3><canvas id="chart_${idx}"></canvas></div>`
+    `<div class="report-page"><h3>${sc.title}</h3><div class="chart-wrap"><canvas id="chart_${idx}"></canvas></div></div>`
   ).join("");
 
+  const taxItems = [
+    { line1: "① 無対策", line2: "(妻50%)", gift: 0, tax1: rNone.tax1, tax2: rNone.tax2 },
+    { line1: "② 暦年・動的最適", line2: `(妻${ratioDyn}%)`, gift: rDyn.giftTax, tax1: rDyn.tax1, tax2: rDyn.tax2 },
+    { line1: "③ 相続時精算課税", line2: `(妻${ratioSei}%)`, gift: rSei.giftTax, tax1: rSei.tax1, tax2: rSei.tax2 },
+    { line1: "④ ハイブリッド", line2: `(妻${ratioHyb}%)`, gift: rHyb.giftTax, tax1: rHyb.tax1, tax2: rHyb.tax2 }
+  ];
+
+  lastRenderState = { scenarios, maxAsset, taxItems };
+
   document.getElementById("resultSection").style.display = "block";
-  scenarios.forEach((sc, idx) => {
-    drawTimelineChart(document.getElementById(`chart_${idx}`), sc.tl, maxAsset);
-  });
+  redrawAllCharts();
 }
 
 // ----------------------------------------------------------------------------
@@ -713,10 +947,20 @@ if ("serviceWorker" in navigator) {
   });
 }
 
+window.addEventListener("resize", redrawAllCharts);
+window.addEventListener("beforeprint", redrawAllCharts);
+window.addEventListener("afterprint", redrawAllCharts);
+
 document.addEventListener("DOMContentLoaded", () => {
   applyFormValues(DEFAULTS);
   document.getElementById("runBtn").addEventListener("click", runSimulation);
   document.getElementById("hybridBtn").addEventListener("click", () => applyFormValues(HYBRID_PRESET));
   document.getElementById("resetBtn").addEventListener("click", () => applyFormValues(DEFAULTS));
-  document.getElementById("printBtn").addEventListener("click", () => window.print());
+  document.getElementById("printBtn").addEventListener("click", () => {
+    if (!lastRenderState) runSimulation();
+    if (lastRenderState) {
+      redrawAllCharts();
+      setTimeout(() => window.print(), 100);
+    }
+  });
 });
